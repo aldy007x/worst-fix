@@ -1,54 +1,49 @@
 #!/usr/bin/env python3
-"""Worst Fix Ever: Funniest Commit Message — entry writer.
-
-Writes one original commit message for a bug fix that made everything
-worse to $MAKEFUN_OUTPUT_DIR/entry.txt (default ./output/).
-
-Gate (sealed scorer): entry.txt must be UTF-8 text of 1 to 100
-characters, not only white space. This program self-checks that gate
-before exiting.
-"""
+# Worst Fix Ever entry: emit one commit message for a fix that backfired.
+# The line itself lives in COMMIT below. The runner drops it into
+# entry.txt under $MAKEFUN_OUTPUT_DIR and refuses to finish unless the
+# contest gate holds: 1 to 100 characters, not just whitespace.
 
 import os
 import sys
+from pathlib import Path
 
-ENTRY = (
-    "fix: speed up login by skipping the password check; "
-    "login now instant, and optional"
-)
-
-MAX_CHARS = 100
+COMMIT = "fix: speed up login by skipping the password check; login now instant, and optional"
+LIMIT = 100
 
 
-def main() -> int:
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "./output")
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "entry.txt")
+def destination() -> Path:
+    base = os.environ.get("MAKEFUN_OUTPUT_DIR", "output")
+    return Path(base) / "entry.txt"
 
-    text = ENTRY.strip()
-    if not text:
-        print("error: entry is empty", file=sys.stderr)
+
+def run() -> int:
+    line = COMMIT.strip()
+    if not line:
+        print("refusing: the commit message is empty", file=sys.stderr)
         return 1
-    if len(text) > MAX_CHARS:
+    if len(line) > LIMIT:
         print(
-            f"error: entry is {len(text)} chars, over the {MAX_CHARS} limit",
+            f"refusing: {len(line)} chars beats the {LIMIT}-char cap",
             file=sys.stderr,
         )
         return 1
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
+    target = destination()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(line, encoding="utf-8")
 
-    # Self-check the gate: re-read and verify length / non-blank.
-    with open(path, "r", encoding="utf-8") as f:
-        written = f.read()
-    assert written == text, "round-trip mismatch"
-    assert 1 <= len(written) <= MAX_CHARS, "gate: length out of range"
-    assert written.strip(), "gate: entry is only whitespace"
+    back = target.read_text(encoding="utf-8")
+    if back != line:
+        print("refusing: the file came back different from the line", file=sys.stderr)
+        return 1
+    if not 1 <= len(back) <= LIMIT or not back.strip():
+        print("refusing: gate check failed after writing", file=sys.stderr)
+        return 1
 
-    print(f"wrote {path} ({len(written)} chars)")
+    print(f"entry ready: {target} ({len(back)} chars)")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run())
